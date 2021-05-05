@@ -6,12 +6,12 @@ import angle
 
 threshold = 0.5  # Threshold to detect object 阈值
 nms_threshold = 0.2  # (0.1 to 1) 1 means no suppress , 0.1 means high suppress
-classNames = []
+# classNames = []
 with open('../dnn_DetectionModel/coco.names', 'r') as f:
     classNames = f.read().splitlines()
 font = cv2.FONT_HERSHEY_PLAIN
 
-color = (255, 0, 0)
+color_blue = (255, 0, 0)    # color in bgr
 color_red = (0, 0, 255)
 weightsPath = "../dnn_DetectionModel/frozen_inference_graph.pb"
 configPath = "../dnn_DetectionModel/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
@@ -25,7 +25,7 @@ mpDraw = mp.solutions.drawing_utils     # use this to draw
 mpPose = mp.solutions.pose
 pose = mpPose.Pose()    # pose: the function to get the pose
 angleMax = 0
-cap = cv2.VideoCapture('../PoseVideos/2.mp4')  # read our video
+cap = cv2.VideoCapture('../PoseVideos/1.mp4')  # read our video
 pTime = 0   # previous time
 
 while True:
@@ -34,7 +34,7 @@ while True:
         # imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)   # bgr to rgb
         imgRGB = img    # no need to transfer
         results = pose.process(imgRGB)  # results.pose_landmarks mean the key point of our pose
-        classIds, conf, bbox = net.detect(img, confThreshold=threshold)  # confidence
+        classIds, conf, bbox = net.detect(imgRGB, confThreshold=threshold)  # confidence
         bbox = list(bbox)  # list() 函数用于将元组、区间（range）、字典转换为列表
         conf = list(np.array(conf).reshape(1, -1)[0])
         conf = list(map(float, conf))
@@ -50,7 +50,7 @@ while True:
                 cx, cy = int(lm.x*w), int(lm.y*h)   # to get the true x,y of the landmarks
                 lmList.append([lm.x, lm.y])
                 if draw:
-                    cv2.circle(img, (cx, cy), 5, color, cv2.FILLED)
+                    cv2.circle(img, (cx, cy), 5, color_blue, cv2.FILLED)
 
             if lmList:
                 y = [lmList[28][0] - lmList[27][0], lmList[28][1] - lmList[27][1]]
@@ -62,7 +62,8 @@ while True:
                      lmList[11][1] + lmList[12][1] - lmList[23][1] - lmList[24][1]]
                 if (direction == 'left' and x[0] > 0) or (direction == 'right' and x[0] < 0):
                     back_angle = abs(90 - angle.angle(x, y))
-                    if back_angle > angleMax:
+                    # print(back_angle)
+                    if 70 > back_angle > angleMax:  # 防止大的离谱？
                         angleMax = back_angle
 
         if len(classIds) != 0:
@@ -83,10 +84,11 @@ while True:
         fps = 1/(cTime-pTime)
         pTime = cTime
 
-        cv2.putText(img, str(int(fps)), (70, 50), font,  3, (255, 0, 0), 3)
+        cv2.putText(img, 'Fps:'+str(int(fps)), (30, 30), font,  1.5, color_blue, 2)
 
         cv2.imshow("Image", img)    # show the frames of the video
         cv2.waitKey(1)  # delay
+
     except:
         break
 print("后仰最大角={}".format(angleMax))

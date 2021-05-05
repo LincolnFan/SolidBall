@@ -19,11 +19,8 @@ with open('../dnn_DetectionModel/coco.names', 'r') as f:
 font = cv2.FONT_HERSHEY_PLAIN
 Colors = np.random.uniform(0, 255, size=(len(classNames), 3))
 
-weightsPath = "frozen_inference_graph.pb"
-configPath = "ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
-
-# weightsPath = "dnn_DetectionModel/frozen_inference_graph.pb"
-# configPath = "dnn_DetectionModel/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
+weightsPath = "../dnn_DetectionModel/frozen_inference_graph.pb"
+configPath = "../dnn_DetectionModel/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
 net = cv2.dnn_DetectionModel(weightsPath, configPath)
 net.setInputSize(320, 320)
 net.setInputScale(1.0 / 127.5)

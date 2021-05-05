@@ -23,25 +23,18 @@ class poseDetector:
     def findPose(self, img, draw=True):
         # imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)   # bgr to rgb
         imgRGB = img
-        self.results = self.pose.process(imgRGB)
-        if self.results.pose_landmarks:
-            if draw:
-                self.mpDraw.draw_landmarks(imgRGB, self.results.pose_landmarks, self.mpPose.POSE_CONNECTIONS)  # draw landmark and connections on imgRGB
-        return imgRGB
-
-    def findPosition(self, img, draw=True):
-        # imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)   # bgr to rgb
-        imgRGB = img
         lmList = []
+        self.results = self.pose.process(imgRGB)
         if self.results.pose_landmarks:
             for id, lm in enumerate(self.results.pose_landmarks.landmark):
                 h, w, c = imgRGB.shape  # height width channel
                 # print(id, lm)
                 cx, cy, cz = int(lm.x*w), int(lm.y*h), int(lm.z*w)   # to get the true x,y of the landmarks
                 lmList.append([id, cx, cy, cz])
-                if draw:    # 是否标注关键点
-                    cv2.circle(imgRGB, (cx, cy), 5, (255, 0, 0), cv2.FILLED)    # 在imgRGB中用蓝色圆圈标记
-        return lmList
+            if draw:
+                self.mpDraw.draw_landmarks(imgRGB, self.results.pose_landmarks, self.mpPose.POSE_CONNECTIONS)
+                # draw landmark and connections on imgRGB
+        return imgRGB, lmList
 
     def findBackAngel(self, img):   # 身体后仰角度
         lmList = []
@@ -50,14 +43,14 @@ class poseDetector:
                 lmList.append([lm.x, lm.y, lm.z])
         if lmList:
             y = [lmList[28][0] - lmList[27][0], lmList[28][1] - lmList[27][1]]
-            # y = [lmList[28][0] - lmList[27][0], 0]
             if lmList[30][0] + lmList[29][0] > lmList[31][0] + lmList[32][0]:
                 self.direction = 'left'
 
             x = [lmList[11][0]+lmList[12][0]-lmList[23][0]-lmList[24][0],
                  lmList[11][1]+lmList[12][1]-lmList[23][1]-lmList[24][1]]
-            if (self.direction == 'left' and x[0] > 0) or self.direction == 'right' and x[0] < 0:
+            if (self.direction == 'left' and x[0] > 0) or (self.direction == 'right' and x[0] < 0):
                 return abs(90 - angle.angle(x, y))
+
 
 def main():
     cap = cv2.VideoCapture('PoseVideos/1.mp4')  # read our video

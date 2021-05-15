@@ -1,14 +1,13 @@
 import math
-
 import cv2  # a library of programming functions mainly aimed at real-time computer vision
 import mediapipe as mp  # open source cross-platform, customizable ML solutions for live and streaming media
 import numpy as np
 import sympy as sp
 import time
 import angle
-from root2 import root_2
+from root2 import root_2    # 一元二次方程组的根
 
-cap = cv2.VideoCapture('../PoseVideos/2.mp4')  # read our video
+cap = cv2.VideoCapture('../Videos/1.mp4')  # read our video
 threshold = 0.5  # Threshold to detect object 阈值
 nms_threshold = 0.2  # (0.1 to 1) 1 means no suppress , 0.1 means high suppress
 pose_draw = True  # whether to draw the pose
@@ -31,7 +30,8 @@ mpPose = mp.solutions.pose
 pose = mpPose.Pose()    # pose: the function to get the pose
 
 pTime = 0   # previous time
-angleMax = 0
+angleBackMax = 0
+angle_kneeMin = 180
 ball_position_x = []
 ball_position_y = []
 y_min = 10000
@@ -55,28 +55,41 @@ while True:
         lmList = []
         for pose_id, lm in enumerate(results.pose_landmarks.landmark):
             h, w, c = img.shape  # height width channel
-            # cx, cy = int(lm.x*w), int(lm.y*h)   # to get the true x,y of the landmarks
-            cx, cy = lm.x*w, lm.y*h
+            cx, cy = lm.x * w, lm.y * h   # to get the true x,y of the landmarks
             lmList.append([cx, cy])
 
+        # --求最大的后仰角度--
         if lmList:
             # y = [lmList[28][0] - lmList[27][0], lmList[28][1] - lmList[27][1]]
             y = [1, 0]
             if lmList[30][0] + lmList[29][0] > lmList[31][0] + lmList[32][0]:
-                direction = 'left'
+                direction = 1  # 'left'
             else:
-                direction = 'right'
-            x = [lmList[11][0] + lmList[12][0] - lmList[23][0] - lmList[24][0],
-                 lmList[11][1] + lmList[12][1] - lmList[23][1] - lmList[24][1]]     # 腰指向肩的向量
-            if (direction == 'left' and x[0] > 0) or (direction == 'right' and x[0] < 0):
-                back_angle = abs(90 - angle.angle(x, y))
+                direction = -1  # 'right'
+            x_body = [lmList[11][0] + lmList[12][0] - lmList[23][0] - lmList[24][0],
+                      lmList[11][1] + lmList[12][1] - lmList[23][1] - lmList[24][1]]     # 腰指向肩(躯干)的向量
+            if direction * x_body[0] > 0:
+                back_angle = abs(90 - angle.angle(x_body, y))
                 # print(back_angle)
-                if 70 > back_angle > angleMax:  # 防止大的离谱？
-                    angleMax = back_angle
-            y_m = lmList[16][1]/2 + lmList[15][1]/2
+                if 70 > back_angle > angleBackMax:  # 防止大的离谱？
+                    angleBackMax = back_angle
+            '''
+            求出手点纵坐标
+            '''
+            y_m = lmList[17][1]/4 + lmList[18][1]/4 + lmList[18][1]/4 + lmList[18][1]/4
             if y_m < y_min:
                 y_min = y_m
 
+            #   求膝盖弯曲角度
+            if direction * (lmList[26][0]-lmList[25][0]) > 0:
+                thigh = [lmList[24][0] - lmList[26][0], lmList[24][1] - lmList[26][1]]
+                calf = [lmList[28][0] - lmList[26][0], lmList[28][1] - lmList[26][1]]
+            else:
+                thigh = [lmList[23][0] - lmList[25][0], lmList[23][1] - lmList[25][1]]
+                calf = [lmList[27][0] - lmList[25][0], lmList[27][1] - lmList[25][1]]   # 选择后腿
+            knee_angle = angle.angle(thigh, calf)
+            if knee_angle < angle_kneeMin:
+                angle_kneeMin = knee_angle
     if len(classIds) != 0:
         for i in indices:
             i = i[0]
@@ -85,14 +98,14 @@ while True:
                 confidence = str(round(conf[i], 2))
                 x, y, w, h = box[0], box[1], box[2], box[3]
                 if ball_draw:
-                    cv2.circle(img, (int(x+w/2), int(y+h/2)), int(w/4+h/4), color_red, thickness=2)
+                    cv2.circle(img, (int(x + w / 2), int(y + h / 2)), int(w / 4 + h / 4), color_red, thickness=2)
                 if lmList:
-                    dis1 = np.linalg.norm([lmList[15][0]+lmList[16][0] - 2 * x - w,
-                                           lmList[15][1]+lmList[16][1] - 2 * y - h], ord=2)  # 2范数
-                    dis2 = np.linalg.norm([lmList[13][0]+lmList[14][0] - lmList[15][0] - lmList[16][0],
+                    dis1 = np.linalg.norm([lmList[15][0] + lmList[16][0] - 2 * x - w,  # distance ball to hand
+                                           lmList[15][1] + lmList[16][1] - 2 * y - h], ord=2)  # 2范数
+                    dis2 = np.linalg.norm([lmList[13][0]+lmList[14][0] - lmList[15][0] - lmList[16][0],  # 小臂
                                            lmList[13][1]+lmList[14][1] - lmList[15][1] - lmList[16][1]], ord=2)
-                    if dis1 > dis2:
-                        ball_position_x.append(x+w/2)
+                    if dis1 > 0.25 * dis2:
+                        ball_position_x.append(x + w / 2)
                         ball_position_y.append(y+h/2)
     cTime = time.time()
     fps = 1/(cTime-pTime)
@@ -102,23 +115,16 @@ while True:
     cv2.imshow("Image", img)    # show the frames of the video
     cv2.waitKey(1)  # delay
 
-print("后仰最大角={}".format(angleMax))
+print("后仰最大角={}".format(angleBackMax))
 cap.release()
 cv2.destroyAllWindows()
-print('球的轨迹横纵坐标：')
-print(ball_position_x)
-print(ball_position_y)
+# print('球的轨迹横纵坐标：')
+# print(ball_position_x)
+# print(ball_position_y)
 # print('球的出手点纵轴坐标：{}'.format(y_min))
 coe = np.polyfit(ball_position_x, ball_position_y, 2)   # use Parabola to fit the ball_track_point
 p_x = sp.symbols('p_x')
-p_y = coe[0] * p_x * p_x + coe[1] * p_x + coe[2]
-print('球的轨迹为：py = {}'.format(p_y))
-
+p_y = coe[0] * p_x * p_x + coe[1] * p_x + coe[2]    # 拟合曲线
 x_r = root_2(coe[0], coe[1], coe[2] - y_min)
 print('出球角度:{}'.format(float(math.atan(abs(sp.diff(p_y, p_x).evalf(subs={p_x: x_r[0]})))*180/math.pi)))   # 出球角度（maybe）
-
-'''
-y_min don't work well
-may try to use the x when
- max the distance from foot to the hand 
-'''
+print('后腿膝盖弯曲角度:{}'.format(angle_kneeMin))

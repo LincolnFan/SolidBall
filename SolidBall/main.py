@@ -1,24 +1,18 @@
-import math
+from utils import angle, root_2, arc_tan_du
 import cv2  # a library of programming functions mainly aimed at real-time computer vision
 import mediapipe as mp  # open source cross-platform, customizable ML solutions for live and streaming media
 import numpy as np
 import sympy as sp
 import time
-import angle
-from root2 import root_2    # 一元二次方程组的根
-
-cap = cv2.VideoCapture('../Videos/1.mp4')  # read our video
-threshold = 0.5  # Threshold to detect object 阈值
-nms_threshold = 0.2  # (0.1 to 1) 1 means no suppress , 0.1 means high suppress
-pose_draw = True  # whether to draw the pose
-ball_draw = True  # whether to draw the ball
-font = cv2.FONT_HERSHEY_PLAIN
-color_blue = (255, 0, 0)    # color in bgr
-color_red = (0, 0, 255)
-with open('../dnn_DetectionModel/coco.names', 'r') as f:    # 模块前期配置
+import configparser
+import initParam
+config = configparser.ConfigParser()
+config.read('../docs/param_suggestion.ini')
+cap = cv2.VideoCapture('../Videos/3.mp4')  # read our video
+with open('../docs/coco.names', 'r') as f:    # 模块前期配置
     classNames = f.read().splitlines()
-weightsPath = "../dnn_DetectionModel/frozen_inference_graph.pb"
-configPath = "../dnn_DetectionModel/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
+weightsPath = "../docs/frozen_inference_graph.pb"
+configPath = "../docs/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
 net = cv2.dnn_DetectionModel(weightsPath, configPath)
 net.setInputSize(320, 320)
 net.setInputScale(1.0 / 127.5)
@@ -34,6 +28,7 @@ angleBackMax = 0
 angle_kneeMin = 180
 ball_position_x = []
 ball_position_y = []
+dis_feet = []
 y_min = 10000
 while True:
     success, img = cap.read()   # this img is in bgr
@@ -41,16 +36,16 @@ while True:
     imgRGB = img    # no need to transfer
     try:
         results = pose.process(imgRGB)  # results.pose_landmarks mean the key point of our pose
-        classIds, conf, bbox = net.detect(imgRGB, confThreshold=threshold)  # confidence
+        classIds, conf, bbox = net.detect(imgRGB, confThreshold=initParam.threshold)  # confidence
     except AttributeError:
         break
     bbox = list(bbox)  # list() 函数用于将元组、区间（range）、字典转换为列表
     conf = list(np.array(conf).reshape(1, -1)[0])
     conf = list(map(float, conf))
-    indices = cv2.dnn.NMSBoxes(bbox, conf, threshold, nms_threshold)
+    indices = cv2.dnn.NMSBoxes(bbox, conf, initParam.threshold, initParam.nms_threshold)
 
     if results.pose_landmarks:
-        if pose_draw:
+        if initParam.pose_draw:
             mpDraw.draw_landmarks(img, results.pose_landmarks, mpPose.POSE_CONNECTIONS)
         lmList = []
         for pose_id, lm in enumerate(results.pose_landmarks.landmark):
@@ -69,17 +64,13 @@ while True:
             x_body = [lmList[11][0] + lmList[12][0] - lmList[23][0] - lmList[24][0],
                       lmList[11][1] + lmList[12][1] - lmList[23][1] - lmList[24][1]]     # 腰指向肩(躯干)的向量
             if direction * x_body[0] > 0:
-                back_angle = abs(90 - angle.angle(x_body, y))
-                # print(back_angle)
+                back_angle = abs(90 - angle(x_body, y))
                 if 70 > back_angle > angleBackMax:  # 防止大的离谱？
                     angleBackMax = back_angle
-            '''
-            求出手点纵坐标
-            '''
+            # 求出手点纵坐标
             y_m = lmList[17][1]/4 + lmList[18][1]/4 + lmList[18][1]/4 + lmList[18][1]/4
             if y_m < y_min:
                 y_min = y_m
-
             #   求膝盖弯曲角度
             if direction * (lmList[26][0]-lmList[25][0]) > 0:
                 thigh = [lmList[24][0] - lmList[26][0], lmList[24][1] - lmList[26][1]]
@@ -87,9 +78,11 @@ while True:
             else:
                 thigh = [lmList[23][0] - lmList[25][0], lmList[23][1] - lmList[25][1]]
                 calf = [lmList[27][0] - lmList[25][0], lmList[27][1] - lmList[25][1]]   # 选择后腿
-            knee_angle = angle.angle(thigh, calf)
+            knee_angle = angle(thigh, calf)
             if knee_angle < angle_kneeMin:
                 angle_kneeMin = knee_angle
+            # 求两脚分开的距离
+            # dis_feet.append(abs(lmList[28][0] - lmList[27][0]))
     if len(classIds) != 0:
         for i in indices:
             i = i[0]
@@ -97,8 +90,9 @@ while True:
                 box = bbox[i]
                 confidence = str(round(conf[i], 2))
                 x, y, w, h = box[0], box[1], box[2], box[3]
-                if ball_draw:
-                    cv2.circle(img, (int(x + w / 2), int(y + h / 2)), int(w / 4 + h / 4), color_red, thickness=2)
+                if initParam.ball_draw:
+                    cv2.circle(img, (int(x + w / 2), int(y + h / 2)), int(w / 4 + h / 4),
+                               initParam.color_red, thickness=2)
                 if lmList:
                     dis1 = np.linalg.norm([lmList[15][0] + lmList[16][0] - 2 * x - w,  # distance ball to hand
                                            lmList[15][1] + lmList[16][1] - 2 * y - h], ord=2)  # 2范数
@@ -111,20 +105,37 @@ while True:
     fps = 1/(cTime-pTime)
     pTime = cTime
 
-    cv2.putText(img, 'Fps:'+str(int(fps)), (30, 30), font,  1.5, color_blue, 2)
+    cv2.putText(img, 'Fps:'+str(int(fps)), (30, 30), initParam.font,  1.5, initParam.color_blue, 2)
     cv2.imshow("Image", img)    # show the frames of the video
     cv2.waitKey(1)  # delay
-
-print("后仰最大角={}".format(angleBackMax))
 cap.release()
 cv2.destroyAllWindows()
-# print('球的轨迹横纵坐标：')
-# print(ball_position_x)
-# print(ball_position_y)
-# print('球的出手点纵轴坐标：{}'.format(y_min))
+
 coe = np.polyfit(ball_position_x, ball_position_y, 2)   # use Parabola to fit the ball_track_point
 p_x = sp.symbols('p_x')
 p_y = coe[0] * p_x * p_x + coe[1] * p_x + coe[2]    # 拟合曲线
 x_r = root_2(coe[0], coe[1], coe[2] - y_min)
-print('出球角度:{}'.format(float(math.atan(abs(sp.diff(p_y, p_x).evalf(subs={p_x: x_r[0]})))*180/math.pi)))   # 出球角度（maybe）
-print('后腿膝盖弯曲角度:{}'.format(angle_kneeMin))
+ball_angle = arc_tan_du(sp.diff(p_y, p_x).evalf(subs={p_x: x_r[0]}))
+suggest = config.items('suggest1')
+
+# print("后仰最大角度={}".format(angleBackMax))
+# print('出球角度:{}'.format(ball_angle))  # 出球角度
+# print('后腿膝盖弯曲角度:{}'.format(angle_kneeMin))
+string = ['', '身体可以后仰地更多一点', '身体后仰太多了', '球出手的角度可以更大一点', '球出手的角度可以稍微小一点', '发力时注意弯曲膝盖蹬地面']
+
+sug_dic = {}
+advice = ''
+for dic_i in suggest:
+    sug_dic[dic_i[0]] = float(dic_i[1])
+if angleBackMax < sug_dic['back_angle_suggested'] - sug_dic['back_angle_tolerance']:
+    advice = advice + string[1] + ','
+elif angleBackMax > sug_dic['back_angle_suggested'] + sug_dic['back_angle_tolerance']:
+    advice = advice + string[2] + ','
+if ball_angle < sug_dic['ball_angle_suggested'] - sug_dic['ball_angle_tolerance']:
+    advice = advice + string[3] + ','
+elif ball_angle > sug_dic['ball_angle_suggested'] + sug_dic['ball_angle_tolerance']:
+    advice = advice + string[4] + ','
+if angle_kneeMin > sug_dic['knee_angle_suggested']:
+    advice = advice + string[5]
+print('--------------------------------')
+print(advice)

@@ -6,7 +6,7 @@ mpDraw = mp.solutions.drawing_utils     # use this to draw
 mpPose = mp.solutions.pose
 pose = mpPose.Pose()    # pose: the function to get the pose
 
-cap = cv2.VideoCapture('../PoseVideos/1.mp4')  # read our video
+cap = cv2.VideoCapture('../Videos/2.mp4')  # read our video
 pTime = 0   # previous time
 
 while True:
@@ -21,7 +21,7 @@ while True:
             for id, lm in enumerate(results.pose_landmarks.landmark):
                 h, w, c = img.shape  # height width channel
                 print(id, lm)
-                cx, cy = int(lm.x*w), int(lm.y*h)   # to get the true x,y of the landmarks
+                cx, cy = int(lm.x_body * w), int(lm.y * h)   # to get the true x,y of the landmarks
                 cv2.circle(img, (cx, cy), 5, (255, 0, 0), cv2.FILLED)
         cTime = time.time()
         fps = 1/(cTime-pTime)
@@ -31,5 +31,5 @@ while True:
 
         cv2.imshow("Image", img)    # show the frames of the video
         cv2.waitKey(1)  # delay
-    except:
+    except AttributeError:
         break
